@@ -1,0 +1,18 @@
+# Overlay for local end-to-end testing:
+#   docker compose -f docker-compose.yml -f docker-compose.test.yml up -d --build
+#
+# Adds a throwaway Samba server seeded with files that trip smbcrawler's default
+# secret rules. From the `worker` container it is reachable as host `samba:445`.
+
+services:
+  samba:
+    image: dperson/samba
+    command: >
+      -u "user1;password1"
+      -s "public;/share;yes;no;no;user1"
+      -w "WORKGROUP"
+    read_only: false
+    volumes:
+      - ./testdata/share:/share
+    tmpfs:
+      - /tmp

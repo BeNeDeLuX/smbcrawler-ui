@@ -1,0 +1,68 @@
+name: smbcrawler-ui
+
+x-app: &app
+  build:
+    context: ..
+    dockerfile: smbcrawler-ui/Dockerfile
+  image: smbcrawler-ui:latest
+  environment:
+    APP_PASSWORD: ${APP_PASSWORD:?set APP_PASSWORD in .env}
+    SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env}
+    FERNET_KEY: ${FERNET_KEY:?set FERNET_KEY in .env}
+    DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://smbcrawler:smbcrawler@db:5432/smbcrawler_ui}
+    REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+    DATA_DIR: ${DATA_DIR:-/data}
+    SCAN_CONCURRENCY: ${SCAN_CONCURRENCY:-2}
+    XDG_DATA_HOME: /data/xdg
+  volumes:
+    - scandata:/data
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-smbcrawler}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-smbcrawler}
+      POSTGRES_DB: ${POSTGRES_DB:-smbcrawler_ui}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-smbcrawler}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    <<: *app
+    command: >
+      sh -c "python -m app.dbinit &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    ports:
+      - "${API_PORT:-8000}:8000"
+
+  worker:
+    <<: *app
+    command: >
+      sh -c "python -m app.dbinit &&
+             python -m app.worker.run"
+    # SMB scans need outbound tcp/445 to targets. If your targets sit on the
+    # docker host's networks, uncomment the next line (Linux only) and remove
+    # the `depends_on`/`networks` conflicts as needed.
+    # network_mode: host
+
+volumes:
+  scandata:
+  pgdata:

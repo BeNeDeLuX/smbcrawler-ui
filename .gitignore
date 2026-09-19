@@ -1,0 +1,17 @@
+.env
+*.pyc
+__pycache__/
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+frontend/node_modules/
+frontend/dist/
+backend/app/static/*
+!backend/app/static/.gitkeep
+
+# local scan data if ever run outside docker
+data/
+*.crwl
+*.crwl.d/
