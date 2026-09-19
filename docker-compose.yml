@@ -1,10 +1,13 @@
 name: smbcrawler-ui
 
 x-app: &app
-  build:
-    context: ..
-    dockerfile: smbcrawler-ui/Dockerfile
-  image: smbcrawler-ui:latest
+  # Pulled from Docker Hub by default (built + published by
+  # .github/workflows/docker-publish.yml on every push to main). No local
+  # build, no need for the sibling ../smbcrawler checkout at runtime.
+  # For local development against your own smbcrawler/backend/frontend
+  # changes, build instead:
+  #   docker compose -f docker-compose.yml -f docker-compose.build.yml build
+  image: ${SMBCRAWLER_UI_IMAGE:-benedelux/smbcrawler-ui:latest}
   environment:
     APP_PASSWORD: ${APP_PASSWORD:?set APP_PASSWORD in .env}
     SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env}

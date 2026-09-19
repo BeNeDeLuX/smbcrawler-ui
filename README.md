@@ -38,6 +38,10 @@ import of externally-produced `.crwl` files · interactive API docs at `/docs`.
 
 ## Quick start
 
+By default `docker-compose.yml` pulls the prebuilt image from Docker Hub
+(`benedelux/smbcrawler-ui`, published by the CI workflow below) — no local
+build, no need for a sibling `smbcrawler` checkout at runtime:
+
 ```bash
 cd smbcrawler-ui
 cp .env.example .env
@@ -45,12 +49,23 @@ cp .env.example .env
 #   python -c "import secrets; print(secrets.token_urlsafe(48))"
 #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 
-docker compose up -d --build
+docker compose up -d
 # open http://localhost:8000  and log in with APP_PASSWORD
 ```
 
-The build context is the parent directory (it needs both `smbcrawler/` and
-`smbcrawler-ui/`); `../.dockerignore` keeps the rest of the home dir out.
+### Building locally instead
+
+To run against your own smbcrawler/backend/frontend changes, build the image
+from source with the `docker-compose.build.yml` overlay:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.build.yml build
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d
+```
+
+This needs a sibling `../smbcrawler` checkout — the build context is the
+**parent** directory (it needs both `smbcrawler/` and `smbcrawler-ui/`);
+`../.dockerignore` keeps the rest of the home dir out.
 
 ### Networking
 
@@ -62,7 +77,8 @@ hosts on the Docker host's own L2 networks, uncomment `network_mode: host` on th
 ## End-to-end test with a throwaway Samba server
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.test.yml up -d --build
+docker compose -f docker-compose.yml -f docker-compose.test.yml up -d
+# testing local changes instead: add -f docker-compose.build.yml and --build
 ```
 
 Adds a `samba` service (seeded from `testdata/share/`, with files that trip
@@ -134,9 +150,9 @@ variables → Actions):
 
 Resulting tags on `<dockerhub-user>/smbcrawler-ui`: `latest` + branch name on
 every push to `main`, `sha-<short-sha>` always, and semver tags (`1.2.0`,
-`1.2`) when you push a `v1.2.0`-style git tag. Pull it straight into
-`docker-compose.yml` by pointing `api`/`worker`'s `image:` at it instead of
-building locally.
+`1.2`) when you push a `v1.2.0`-style git tag. `docker-compose.yml` already
+pulls `latest` by default (see Quick start); point it at a fork's image or a
+pinned tag via the `SMBCRAWLER_UI_IMAGE` variable in `.env`.
 
 ## Development
 

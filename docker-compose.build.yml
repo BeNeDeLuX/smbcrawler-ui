@@ -1,0 +1,19 @@
+# Local-build overlay: builds the image from source instead of pulling it from
+# Docker Hub. Needs a sibling ../smbcrawler checkout (see Dockerfile).
+#
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml build
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d
+#
+# Combine with docker-compose.test.yml as usual for the throwaway Samba server.
+
+x-build: &build
+  build:
+    context: ..
+    dockerfile: smbcrawler-ui/Dockerfile
+  image: smbcrawler-ui:local
+
+services:
+  api:
+    <<: *build
+  worker:
+    <<: *build
