@@ -1,5 +1,6 @@
 # smbcrawler UI
 
+[![GitHub release](https://img.shields.io/github/v/release/BeNeDeLuX/smbcrawler-ui)](https://github.com/BeNeDeLuX/smbcrawler-ui/releases/latest)
 [![Docker Hub](https://img.shields.io/docker/v/benedelux/smbcrawler-ui?sort=semver&label=Docker%20Hub)](https://hub.docker.com/r/benedelux/smbcrawler-ui)
 [![Image size](https://img.shields.io/docker/image-size/benedelux/smbcrawler-ui/latest)](https://hub.docker.com/r/benedelux/smbcrawler-ui)
 
