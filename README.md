@@ -4,6 +4,14 @@ A web UI + REST API around [smbcrawler](https://github.com/SySS-Research/smbcraw
 create SMB share scans, watch them run, then browse / search / annotate the files
 and secrets they find. Everything runs in Docker.
 
+**Features:** live scan progress + full log · target reachability / share-listing
+outcome (incl. "reachable but no login worked") · share permissions · file tree
+with text preview · **on-demand SMB download** of files smbcrawler didn't
+auto-fetch · full-text search over converted file content · charts on file
+types/sizes/shares and secrets per share/rule · review workflow (false-positive
+/ important / notes) · HTML/JSON/CSV export via smbcrawler's own reports ·
+import of externally-produced `.crwl` files · interactive API docs at `/docs`.
+
 ```
 ┌────────┐   ┌──────────┐   ┌────────────────────────────┐
 │  db    │   │  redis   │   │  scandata  (named volume)  │
@@ -61,13 +69,22 @@ Adds a `samba` service (seeded from `testdata/share/`, with files that trip
 smbcrawler's default secret rules). In the UI:
 
 1. **New scan** → target `samba`, user `user1`, password `password1`, depth `-1`,
-   check-write on. Watch progress + live log on the Overview tab.
-2. **Shares / Files / Secrets** tabs populate. Preview `config/default.ini`,
-   `gpo/groups.xml`; the Secrets tab lists `iloveyou`, the GPP `cpassword`, etc.
-3. Mark a secret **false positive** → reload → it stays.
-4. **Search** for `iloveyou` → snippet hit → opens the file.
-5. **Export** → HTML report downloads as one self-contained file.
-6. **Import**: from a shell,
+   check-write on. Watch progress + live log on the **Overview** tab (full log
+   also under the **Log** tab).
+2. **Targets** tab: `samba:445` shows port open + listable; tick "only reachable
+   servers where share listing failed" to see hosts worth retrying with other
+   creds. **Shares / Files / Secrets** tabs populate. Preview
+   `config/default.ini`; the Secrets tab lists `iloveyou`, `secretpassword`, etc.
+3. **Files** tab → untick "downloaded only" → pick `gpo/groups.xml` (enumerated
+   but not auto-downloaded) → **Fetch from SMB** with the same creds → it now
+   previews and its GPP `cpassword` shows up under Secrets.
+4. **Stats** tab: file types / sizes / files per share, secrets per share and
+   per detection rule, as charts.
+5. Mark a secret **false positive** on the Secrets tab → reload → it stays
+   (see it listed under **Review**).
+6. **Search** for `iloveyou` → snippet hit → opens the file.
+7. **Export** → HTML report downloads as one self-contained file.
+8. **Import**: from a shell,
    `docker compose exec -T worker sh -c 'cd /data/scans/<id> && tar -C output.crwl.d -cf - content' > content.tar`
    and `docker compose exec -T worker cat /data/scans/<id>/output.crwl > out.crwl`,
    delete the scan, then re-import both via *Import .crwl* (only the `content/`
@@ -89,9 +106,11 @@ the session cookie and authenticates every subsequent call.
 | `POST /api/scans/dry-run` | effective profiles + parsed targets, no crawl |
 | `GET  /api/scans/{id}` · `/summary` · `/log` · `/events` (SSE) | status & progress |
 | `POST /api/scans/{id}/cancel` · `DELETE /api/scans/{id}` | control |
-| `GET  /api/scans/{id}/targets` · `/shares` · `/tree` · `/paths` | browse results |
+| `GET  /api/scans/{id}/targets?no_access=` · `/shares` · `/tree` · `/paths` | browse results |
 | `GET  /api/scans/{id}/secrets` | secrets (+ annotation overlay) |
+| `GET  /api/scans/{id}/stats` | file/secret stats: types, sizes, per share, per rule |
 | `GET  /api/scans/{id}/files/{hash}` · `/files/{hash}/preview` | raw / converted text |
+| `POST /api/scans/{id}/paths/{path_id}/fetch` | on-demand SMB download of a not-yet-fetched file |
 | `GET  /api/scans/{id}/search?q=` | FTS5 over converted file text |
 | `GET  /api/scans/{id}/report?format=html\|json\|csv&section=…` | smbcrawler reports |
 | `GET/PUT /api/scans/{id}/annotations` | review status + notes |
@@ -115,4 +134,12 @@ the session cookie and authenticates every subsequent call.
   interactive key-listener has no TTY) – ignore it.
 * Credentials transit Redis inside the job payload **Fernet-encrypted** and are
   deleted from Postgres once the crawl ends. Passwords are passed to the
-  subprocess via env, never argv.
+  subprocess via env, never argv. Because of this, an on-demand file fetch
+  (`.../paths/{id}/fetch`) asks for credentials again.
+* "Secrets by rule" is computed on the fly by re-matching each secret's source
+  line against the live default profile — smbcrawler doesn't persist which
+  rule matched. A scan's own `extra_profile_yaml` rules aren't considered here.
+
+See [`CLAUDE.md`](CLAUDE.md) for the architecture notes (scan lifecycle, the
+`.crwl` schema gotchas, frontend structure) aimed at anyone — human or
+Claude Code — extending this repo.
