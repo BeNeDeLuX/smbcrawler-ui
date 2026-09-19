@@ -117,6 +117,27 @@ the session cookie and authenticates every subsequent call.
 | `POST /api/imports` (multipart) | import an existing `.crwl` |
 | `GET  /api/profiles/default` | built-in profile collection |
 
+## CI/CD
+
+`.github/workflows/docker-publish.yml` builds this exact image (checking out
+`SySS-Research/smbcrawler` as the sibling directory the `Dockerfile` expects)
+and pushes it to Docker Hub on every push to `main` and on `v*.*.*` tags, or
+manually via *Run workflow* (optionally pinning a different smbcrawler ref).
+
+One-time setup — add these as **repo secrets** (Settings → Secrets and
+variables → Actions):
+
+| Secret | Value |
+|---|---|
+| `DOCKERHUB_USERNAME` | your Docker Hub username |
+| `DOCKERHUB_TOKEN` | a Docker Hub **access token** (Account Settings → Security → *New Access Token*), not your password |
+
+Resulting tags on `<dockerhub-user>/smbcrawler-ui`: `latest` + branch name on
+every push to `main`, `sha-<short-sha>` always, and semver tags (`1.2.0`,
+`1.2`) when you push a `v1.2.0`-style git tag. Pull it straight into
+`docker-compose.yml` by pointing `api`/`worker`'s `image:` at it instead of
+building locally.
+
 ## Development
 
 * Backend: `backend/` – `pip install -e '.[dev]'`, needs a `smbcrawler` install,
