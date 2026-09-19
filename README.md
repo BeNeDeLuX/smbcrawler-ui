@@ -1,5 +1,8 @@
 # smbcrawler UI
 
+[![Docker Hub](https://img.shields.io/docker/v/benedelux/smbcrawler-ui?sort=semver&label=Docker%20Hub)](https://hub.docker.com/r/benedelux/smbcrawler-ui)
+[![Image size](https://img.shields.io/docker/image-size/benedelux/smbcrawler-ui/latest)](https://hub.docker.com/r/benedelux/smbcrawler-ui)
+
 A web UI + REST API around [smbcrawler](https://github.com/SySS-Research/smbcrawler):
 create SMB share scans, watch them run, then browse / search / annotate the files
 and secrets they find. Everything runs in Docker.
@@ -36,22 +39,36 @@ import of externally-produced `.crwl` files · interactive API docs at `/docs`.
 * smbcrawler itself is **unmodified**; it is `pip install`ed from the sibling
   `../smbcrawler` checkout during the image build (`hatch-vcs` needs its `.git`).
 
-## Quick start
+## Installation from Docker Hub
 
-By default `docker-compose.yml` pulls the prebuilt image from Docker Hub
-(`benedelux/smbcrawler-ui`, published by the CI workflow below) — no local
-build, no need for a sibling `smbcrawler` checkout at runtime:
+The published image ([`benedelux/smbcrawler-ui`](https://hub.docker.com/r/benedelux/smbcrawler-ui))
+is self-contained — it already has smbcrawler installed and the SPA built in,
+so you don't need this repo's source or a sibling `smbcrawler` checkout to run
+it. You only need `docker-compose.yml` and `.env.example`, which you can pull
+down on their own instead of cloning the whole repo:
 
 ```bash
-cd smbcrawler-ui
+mkdir smbcrawler-ui && cd smbcrawler-ui
+curl -fsSLO https://raw.githubusercontent.com/BeNeDeLuX/smbcrawler-ui/main/docker-compose.yml
+curl -fsSLO https://raw.githubusercontent.com/BeNeDeLuX/smbcrawler-ui/main/.env.example
 cp .env.example .env
 # edit .env: set APP_PASSWORD, and generate SECRET_KEY + FERNET_KEY
-#   python -c "import secrets; print(secrets.token_urlsafe(48))"
-#   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+#   python3 -c "import secrets; print(secrets.token_urlsafe(48))"
+#   python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 
-docker compose up -d
+docker compose up -d       # pulls db, redis and benedelux/smbcrawler-ui from Docker Hub
 # open http://localhost:8000  and log in with APP_PASSWORD
 ```
+
+Pin a specific version instead of always tracking `latest` by setting
+`SMBCRAWLER_UI_IMAGE=benedelux/smbcrawler-ui:1.0.0` in `.env` (see the
+[Releases](https://github.com/BeNeDeLuX/smbcrawler-ui/releases) /
+[tags on Docker Hub](https://hub.docker.com/r/benedelux/smbcrawler-ui/tags)
+for available versions).
+
+Cloning the full repo works the same way — `git clone` it, `cd smbcrawler-ui`,
+then the same `cp .env.example .env` + `docker compose up -d` — and additionally
+gets you `docker-compose.test.yml`/`testdata/` for the end-to-end demo below.
 
 ### Building locally instead
 
