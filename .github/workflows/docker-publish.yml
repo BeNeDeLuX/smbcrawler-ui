@@ -1,10 +1,11 @@
 name: Build and publish Docker image
 
-# Builds the same image docker-compose.yml uses for `api`/`worker` and pushes it
-# to Docker Hub. The Dockerfile expects a build context that contains BOTH this
-# repo and a sibling `smbcrawler` checkout (see docker-compose.yml's
-# `build.context: ..`), so this workflow checks both out as subdirectories of
-# one workspace to reproduce that layout in CI.
+# Builds the same image docker-compose.yml uses for `api`/`worker`, runs the
+# backend test suite against it, and only pushes to Docker Hub if that passes.
+# The Dockerfile expects a build context that contains BOTH this repo and a
+# sibling `smbcrawler` checkout (see docker-compose.yml's `build.context: ..`),
+# so this workflow checks both out as subdirectories of one workspace to
+# reproduce that layout in CI.
 #
 # Required repo secrets (Settings -> Secrets and variables -> Actions):
 #   DOCKERHUB_USERNAME  - your Docker Hub username
@@ -30,7 +31,7 @@ env:
   SMBCRAWLER_REF: ${{ github.event.inputs.smbcrawler_ref || 'main' }}
 
 jobs:
-  build-and-push:
+  test-and-publish:
     if: github.repository_owner == 'BeNeDeLuX'
     runs-on: ubuntu-latest
     steps:
@@ -68,13 +69,36 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=sha,prefix=sha-,format=short
 
-      - name: Build and push
+      - name: Build image (local, for the test gate)
         uses: docker/build-push-action@v6
         with:
           context: . # workspace root: contains both smbcrawler-ui/ and smbcrawler/
           file: smbcrawler-ui/Dockerfile
+          load: true
+          tags: smbcrawler-ui:ci-test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run backend test suite (gates the push below)
+        run: |
+          docker run --rm \
+            -e DATABASE_URL=sqlite+pysqlite:////tmp/test.db \
+            -e REDIS_URL=redis://localhost:6379/15 \
+            -e SECRET_KEY=ci-test-secret \
+            -e APP_PASSWORD=ci-test-pass \
+            -e FERNET_KEY= \
+            smbcrawler-ui:ci-test \
+            pytest -q
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: smbcrawler-ui/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # Same context/Dockerfile as the test build above -> this reuses its
+          # cache and is effectively a fast re-tag + push, not a rebuild.
           cache-from: type=gha
           cache-to: type=gha,mode=max
