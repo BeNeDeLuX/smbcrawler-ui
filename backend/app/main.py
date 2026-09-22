@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .auth import require_auth
 from .config import settings
-from .routers import annotations, auth, imports, profiles, results, scans
+from .routers import annotations, auth, imports, profiles, results, scans, tls
 
 DESCRIPTION = """
 REST API for the smbcrawler UI: create SMB share scans, drive them, and browse /
@@ -33,6 +33,7 @@ TAGS = [
     {"name": "annotations", "description": "Review status + notes on paths, files and secrets."},
     {"name": "imports", "description": "Import an existing `.crwl` database."},
     {"name": "profiles", "description": "The built-in smbcrawler profile collection."},
+    {"name": "tls", "description": "The TLS certificate the proxy container serves (self-signed by default, or an uploaded custom one)."},
     {"name": "meta", "description": "Health check."},
 ]
 
@@ -71,6 +72,7 @@ app.include_router(results.router, dependencies=_guard)
 app.include_router(annotations.router, dependencies=_guard)
 app.include_router(imports.router, dependencies=_guard)
 app.include_router(profiles.router, dependencies=_guard)
+app.include_router(tls.router, dependencies=_guard)
 
 
 # ---- Serve the built SPA (if present) ------------------------------------- #

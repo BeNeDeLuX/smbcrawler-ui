@@ -15,7 +15,7 @@ def verify_password(candidate: str) -> bool:
     return hmac.compare_digest(candidate.encode(), settings.app_password.encode())
 
 
-def issue_session(response: Response) -> None:
+def issue_session(response: Response, *, secure: bool = False) -> None:
     token = _serializer.dumps({"t": int(time.time())})
     response.set_cookie(
         settings.session_cookie,
@@ -23,6 +23,18 @@ def issue_session(response: Response) -> None:
         max_age=settings.session_max_age,
         httponly=True,
         samesite="lax",
+        secure=secure,
+    )
+
+
+def is_https_request(request: Request) -> bool:
+    """True if the request reached us over TLS -- directly, or via the `proxy`
+    container, which sets X-Forwarded-Proto. uvicorn doesn't trust that header
+    for request.url.scheme unless configured to, so check it explicitly.
+    """
+    return (
+        request.url.scheme == "https"
+        or request.headers.get("x-forwarded-proto", "").lower() == "https"
     )
 
 

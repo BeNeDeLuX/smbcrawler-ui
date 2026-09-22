@@ -1,5 +1,5 @@
 import { AppShell, Button, Group, Title } from "@mantine/core";
-import { IconApi, IconLogout } from "@tabler/icons-react";
+import { IconApi, IconLogout, IconSettings } from "@tabler/icons-react";
 import { Link, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "./auth";
 
@@ -16,6 +16,15 @@ export function Layout() {
             </Title>
           </Group>
           <Group gap="xs">
+            <Button
+              variant="subtle"
+              size="xs"
+              component={Link}
+              to="/settings"
+              leftSection={<IconSettings size={16} />}
+            >
+              Settings
+            </Button>
             <Button
               variant="subtle"
               size="xs"

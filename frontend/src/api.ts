@@ -42,7 +42,7 @@ export const api = {
     req<T>(p, { method: "POST", body: data === undefined ? undefined : JSON.stringify(data) }),
   put: <T>(p: string, data: unknown) =>
     req<T>(p, { method: "PUT", body: JSON.stringify(data) }),
-  del: (p: string) => req<void>(p, { method: "DELETE" }),
+  del: <T = void>(p: string) => req<T>(p, { method: "DELETE" }),
   postForm: <T>(p: string, form: FormData) =>
     req<T>(p, { method: "POST", body: form }),
 };
@@ -129,4 +129,15 @@ export type AnnotationStatus =
 export interface Annotation {
   status: AnnotationStatus;
   note: string;
+}
+
+export interface TlsCertificate {
+  present: boolean;
+  source?: "self-signed" | "custom" | "unknown";
+  subject?: string;
+  issuer?: string;
+  not_before?: string;
+  not_after?: string;
+  serial_number?: string;
+  fingerprint_sha256?: string;
 }

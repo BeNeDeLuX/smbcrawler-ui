@@ -2,17 +2,17 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
 
-from ..auth import clear_session, issue_session, verify_password
+from ..auth import clear_session, is_https_request, issue_session, verify_password
 from ..schemas import LoginIn
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 @router.post("/login")
-def login(body: LoginIn, response: Response) -> dict:
+def login(body: LoginIn, request: Request, response: Response) -> dict:
     if not verify_password(body.password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="wrong password")
-    issue_session(response)
+    issue_session(response, secure=is_https_request(request))
     return {"ok": True}
 
 

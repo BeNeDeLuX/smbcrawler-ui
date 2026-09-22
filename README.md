@@ -16,19 +16,25 @@ with text preview · **on-demand SMB download** of files smbcrawler didn't
 auto-fetch · full-text search over converted file content · charts on file
 types/sizes/shares and secrets per share/rule · review workflow (false-positive
 / important / notes) · HTML/JSON/CSV export via smbcrawler's own reports ·
-import of externally-produced `.crwl` files · interactive API docs at `/docs`.
+import of externally-produced `.crwl` files · interactive API docs at `/docs` ·
+**HTTPS out of the box** (self-signed by default, upload your own certificate
+under Settings).
 
 ```
-┌────────┐   ┌──────────┐   ┌────────────────────────────┐
-│  db    │   │  redis   │   │  scandata  (named volume)  │
-│ (PG)   │   │ (queue)  │   │  /data/scans/<id>/…        │
-└───┬────┘   └────┬─────┘   └─────────┬──────────────────┘
-    │             │                   │
-┌───┴─────────────┴───────────────────┴───┐   ┌──────────────────────────┐
-│  api   FastAPI + built React SPA        │   │  worker  RQ × N          │
-│  :8000  /api/*  +  /                     │   │  runs `smbcrawler crawl` │
-└─────────────────────────────────────────┘   │  as a subprocess/scan    │
-                                              └──────────────────────────┘
+┌────────┐   ┌──────────┐   ┌────────────────────────────┐   ┌───────────────────────────┐
+│  db    │   │  redis   │   │  scandata  (named volume)  │   │  certs  (named volume)    │
+│ (PG)   │   │ (queue)  │   │  /data/scans/<id>/…        │   │  active/self-signed/custom │
+└───┬────┘   └────┬─────┘   └─────────┬──────────────────┘   └──────┬──────────┬─────────┘
+    │             │                   │                             │          │
+┌───┴─────────────┴───────────────────┴───┐   ┌──────────────────────────┐    │
+│  api   FastAPI + built React SPA        │   │  worker  RQ × N          │    │
+│  :8000  /api/*  +  /  (plain HTTP)       │   │  runs `smbcrawler crawl` │    │
+└───────────────────┬─────────────────────┘   │  as a subprocess/scan    │    │
+                     │                         └──────────────────────────┘    │
+              ┌──────┴──────┐                                                  │
+              │  proxy      │  nginx, TLS termination, self-signed by default ─┘
+              │  :8443 HTTPS│  reloads live when the cert changes
+              └─────────────┘
 ```
 
 * **api** – FastAPI. Serves the SPA at `/` and the REST API at `/api/*`. Session
@@ -37,10 +43,15 @@ import of externally-produced `.crwl` files · interactive API docs at `/docs`.
   `smbcrawler` subprocess writing a `.crwl` SQLite DB + downloaded files under
   `/data/scans/<id>/`. A per-scan SQLite FTS5 index (`search.db`) is built when the
   crawl finishes.
+* **proxy** – nginx reverse proxy terminating TLS in front of `api`. Generates a
+  self-signed certificate on first boot; upload your own under **Settings** in
+  the UI (or `POST /api/tls/certificate`) and it's applied live within a few
+  seconds, no restart.
 * **db** – Postgres: scans/jobs, credentials (Fernet-encrypted, deleted after the
   run), annotations.
-* smbcrawler itself is **unmodified**; it is `pip install`ed from the sibling
-  `../smbcrawler` checkout during the image build (`hatch-vcs` needs its `.git`).
+* smbcrawler itself is **unmodified**; the `api`/`worker` image `pip install`s it
+  from the sibling `../smbcrawler` checkout when built from source (`hatch-vcs`
+  needs its `.git`) — irrelevant when pulling the published image (see below).
 
 ## Installation from Docker Hub
 
@@ -59,15 +70,36 @@ cp .env.example .env
 #   python3 -c "import secrets; print(secrets.token_urlsafe(48))"
 #   python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 
-docker compose up -d       # pulls db, redis and benedelux/smbcrawler-ui from Docker Hub
-# open http://localhost:8000  and log in with APP_PASSWORD
+docker compose up -d       # pulls db, redis, benedelux/smbcrawler-ui[-proxy] from Docker Hub
+# open https://localhost:8443  (self-signed cert -> browser warning is expected)
+# or   http://localhost:8000   (plain HTTP; fine for local/trusted-LAN use)
+# log in with APP_PASSWORD
 ```
 
 Pin a specific version instead of always tracking `latest` by setting
-`SMBCRAWLER_UI_IMAGE=benedelux/smbcrawler-ui:1.0.0` in `.env` (see the
-[Releases](https://github.com/BeNeDeLuX/smbcrawler-ui/releases) /
+`SMBCRAWLER_UI_IMAGE=benedelux/smbcrawler-ui:1.0.0` (and, if you also want a
+matching pinned proxy, `SMBCRAWLER_UI_PROXY_IMAGE=benedelux/smbcrawler-ui-proxy:1.0.0`)
+in `.env` (see the [Releases](https://github.com/BeNeDeLuX/smbcrawler-ui/releases) /
 [tags on Docker Hub](https://hub.docker.com/r/benedelux/smbcrawler-ui/tags)
 for available versions).
+
+### HTTPS / TLS
+
+The `proxy` container generates a self-signed certificate the first time it
+starts and serves it on `TLS_PORT` (`8443` by default) — nothing to configure.
+Browsers will warn about it being untrusted; that's expected for a self-signed
+cert. To use your own (e.g. one from an internal CA, or a Let's Encrypt cert
+you manage separately), go to **Settings** in the UI and upload a PEM
+certificate + unencrypted PEM private key, or:
+
+```bash
+curl -k -b cookies.txt -X POST https://localhost:8443/api/tls/certificate \
+  -F cert=@fullchain.pem -F key=@privkey.pem
+```
+
+It's validated (matching key, not expired) and applied within a few seconds —
+`proxy` picks up the change via a filesystem watch, no restart. **Reset to
+self-signed** in Settings (or `DELETE /api/tls/certificate`) reverts it.
 
 Cloning the full repo works the same way — `git clone` it, `cd smbcrawler-ui`,
 then the same `cp .env.example .env` + `docker compose up -d` — and additionally
@@ -75,8 +107,8 @@ gets you `docker-compose.test.yml`/`testdata/` for the end-to-end demo below.
 
 ### Building locally instead
 
-To run against your own smbcrawler/backend/frontend changes, build the image
-from source with the `docker-compose.build.yml` overlay:
+To run against your own smbcrawler/backend/frontend/proxy changes, build the
+images from source with the `docker-compose.build.yml` overlay:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.build.yml build
@@ -120,7 +152,10 @@ smbcrawler's default secret rules). In the UI:
    (see it listed under **Review**).
 6. **Search** for `iloveyou` → snippet hit → opens the file.
 7. **Export** → HTML report downloads as one self-contained file.
-8. **Import**: from a shell,
+8. **Settings** tab: shows the auto-generated self-signed certificate's
+   subject/issuer/validity/fingerprint. Try `https://localhost:8443` in a
+   browser (it'll warn — expected for self-signed) instead of `:8000`.
+9. **Import**: from a shell,
    `docker compose exec -T worker sh -c 'cd /data/scans/<id> && tar -C output.crwl.d -cf - content' > content.tar`
    and `docker compose exec -T worker cat /data/scans/<id>/output.crwl > out.crwl`,
    delete the scan, then re-import both via *Import .crwl* (only the `content/`
@@ -152,13 +187,18 @@ the session cookie and authenticates every subsequent call.
 | `GET/PUT /api/scans/{id}/annotations` | review status + notes |
 | `POST /api/imports` (multipart) | import an existing `.crwl` |
 | `GET  /api/profiles/default` | built-in profile collection |
+| `GET/POST/DELETE /api/tls/certificate` | inspect / upload / reset the proxy's TLS certificate |
 
 ## CI/CD
 
-`.github/workflows/docker-publish.yml` builds this exact image (checking out
-`SySS-Research/smbcrawler` as the sibling directory the `Dockerfile` expects)
-and pushes it to Docker Hub on every push to `main` and on `v*.*.*` tags, or
-manually via *Run workflow* (optionally pinning a different smbcrawler ref).
+`.github/workflows/docker-publish.yml` builds both images used by
+`docker-compose.yml` — `api`/`worker` (checking out `SySS-Research/smbcrawler`
+as the sibling directory the `Dockerfile` expects) and `proxy` — and pushes
+them to Docker Hub on every push to `main` and on `v*.*.*` tags, or manually
+via *Run workflow* (optionally pinning a different smbcrawler ref). Each image
+is built once locally, gated on a check (the backend pytest suite; a proxy
+smoke test asserting it generates a cert and its nginx config is valid), and
+only pushed if that passes — a broken commit can't reach `latest`.
 
 One-time setup — add these as **repo secrets** (Settings → Secrets and
 variables → Actions):
@@ -168,11 +208,12 @@ variables → Actions):
 | `DOCKERHUB_USERNAME` | your Docker Hub username |
 | `DOCKERHUB_TOKEN` | a Docker Hub **access token** (Account Settings → Security → *New Access Token*), not your password |
 
-Resulting tags on `<dockerhub-user>/smbcrawler-ui`: `latest` + branch name on
-every push to `main`, `sha-<short-sha>` always, and semver tags (`1.2.0`,
-`1.2`) when you push a `v1.2.0`-style git tag. `docker-compose.yml` already
-pulls `latest` by default (see Quick start); point it at a fork's image or a
-pinned tag via the `SMBCRAWLER_UI_IMAGE` variable in `.env`.
+Resulting tags on `<dockerhub-user>/smbcrawler-ui` and `-proxy`: `latest` +
+branch name on every push to `main`, `sha-<short-sha>` always, and semver tags
+(`1.2.0`, `1.2`) when you push a `v1.2.0`-style git tag. `docker-compose.yml`
+already pulls `latest` for both by default (see Quick start); point them at a
+fork's image or a pinned tag via the `SMBCRAWLER_UI_IMAGE` /
+`SMBCRAWLER_UI_PROXY_IMAGE` variables in `.env`.
 
 ## Development
 
@@ -196,6 +237,9 @@ pinned tag via the `SMBCRAWLER_UI_IMAGE` variable in `.env`.
 * "Secrets by rule" is computed on the fly by re-matching each secret's source
   line against the live default profile — smbcrawler doesn't persist which
   rule matched. A scan's own `extra_profile_yaml` rules aren't considered here.
+* The session cookie is only marked `Secure` when you log in over HTTPS (i.e.
+  via `proxy`); logging in on the plain `:8000` port gets a non-`Secure`
+  cookie, as it must to still work there. Prefer `:8443` outside a trusted LAN.
 
 See [`CLAUDE.md`](CLAUDE.md) for the architecture notes (scan lifecycle, the
 `.crwl` schema gotchas, frontend structure) aimed at anyone — human or

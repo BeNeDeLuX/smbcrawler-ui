@@ -15,6 +15,7 @@ import { ScansList } from "./pages/ScansList";
 import { NewScan } from "./pages/NewScan";
 import { ImportScan } from "./pages/ImportScan";
 import { ScanDetail } from "./pages/ScanDetail";
+import { Settings } from "./pages/Settings";
 
 const qc = new QueryClient({
   defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } },
@@ -43,6 +44,7 @@ function App() {
         <Route path="scans/new" element={<NewScan />} />
         <Route path="scans/import" element={<ImportScan />} />
         <Route path="scans/:scanId/*" element={<ScanDetail />} />
+        <Route path="settings" element={<Settings />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

@@ -19,6 +19,12 @@ class Settings(BaseSettings):
     data_dir: Path = Path("/data")
     scan_concurrency: int = 2
 
+    # Shared with the `proxy` (nginx) container. It generates a self-signed
+    # active.crt/active.key here on first boot; uploading/resetting a
+    # certificate through the API rewrites those two files and nginx picks
+    # the change up via an inotify watch -- no restart needed.
+    certs_dir: Path = Path("/certs")
+
     session_cookie: str = "smbui_session"
     session_max_age: int = 60 * 60 * 12  # 12h
 

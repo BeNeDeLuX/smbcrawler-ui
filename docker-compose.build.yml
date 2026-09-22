@@ -17,3 +17,7 @@ services:
     <<: *build
   worker:
     <<: *build
+  proxy:
+    build:
+      context: proxy
+    image: smbcrawler-ui-proxy:local

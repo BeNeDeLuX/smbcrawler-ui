@@ -22,6 +22,7 @@ os.environ["APP_PASSWORD"] = "test-pass"
 os.environ["FERNET_KEY"] = ""
 os.environ["REDIS_URL"] = "redis://localhost:6379/15"
 os.environ["DATA_DIR"] = str(_TMP / "data")
+os.environ["CERTS_DIR"] = str(_TMP / "certs")
 os.environ["DATABASE_URL"] = f"sqlite+pysqlite:///{_TMP / 'app.db'}"
 (_TMP / "data" / "scans").mkdir(parents=True, exist_ok=True)
 

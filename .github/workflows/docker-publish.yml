@@ -1,11 +1,12 @@
 name: Build and publish Docker image
 
-# Builds the same image docker-compose.yml uses for `api`/`worker`, runs the
-# backend test suite against it, and only pushes to Docker Hub if that passes.
-# The Dockerfile expects a build context that contains BOTH this repo and a
-# sibling `smbcrawler` checkout (see docker-compose.yml's `build.context: ..`),
-# so this workflow checks both out as subdirectories of one workspace to
-# reproduce that layout in CI.
+# Builds the two images docker-compose.yml uses (api/worker, and the TLS
+# proxy), runs a test gate against each, and only pushes to Docker Hub if
+# that passes. The main Dockerfile expects a build context that contains
+# BOTH this repo and a sibling `smbcrawler` checkout (see docker-compose.yml's
+# `build.context: ..`), so this workflow checks both out as subdirectories of
+# one workspace to reproduce that layout in CI. The proxy image is
+# self-contained (proxy/) and doesn't need smbcrawler at all.
 #
 # Required repo secrets (Settings -> Secrets and variables -> Actions):
 #   DOCKERHUB_USERNAME  - your Docker Hub username
@@ -28,6 +29,7 @@ permissions:
 
 env:
   IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/smbcrawler-ui
+  IMAGE_PROXY: ${{ secrets.DOCKERHUB_USERNAME }}/smbcrawler-ui-proxy
   SMBCRAWLER_REF: ${{ github.event.inputs.smbcrawler_ref || 'main' }}
 
 jobs:
@@ -100,5 +102,55 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           # Same context/Dockerfile as the test build above -> this reuses its
           # cache and is effectively a fast re-tag + push, not a rebuild.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # ---------------------------------------------------------------- #
+      # proxy (nginx, TLS termination) -- small, self-contained, no
+      # smbcrawler dependency, but gated the same way: build, smoke-test,
+      # only then push.
+      # ---------------------------------------------------------------- #
+      - name: Compute proxy tags/labels
+        id: meta-proxy
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_PROXY }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix=sha-,format=short
+
+      - name: Build proxy image (local, for the smoke test)
+        uses: docker/build-push-action@v6
+        with:
+          context: smbcrawler-ui/proxy
+          load: true
+          tags: smbcrawler-ui-proxy:ci-test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke-test proxy image (self-signed cert + nginx config)
+        run: |
+          docker volume create certs-smoke
+          docker run -d --name proxy-smoke -v certs-smoke:/certs smbcrawler-ui-proxy:ci-test
+          for i in $(seq 1 20); do
+            docker exec proxy-smoke test -f /certs/active.crt && break
+            sleep 0.5
+          done
+          docker exec proxy-smoke test -f /certs/active.crt
+          docker exec proxy-smoke test -f /certs/active.key
+          docker exec proxy-smoke nginx -t
+          docker rm -f proxy-smoke
+          docker volume rm certs-smoke
+
+      - name: Build and push proxy image
+        uses: docker/build-push-action@v6
+        with:
+          context: smbcrawler-ui/proxy
+          push: true
+          tags: ${{ steps.meta-proxy.outputs.tags }}
+          labels: ${{ steps.meta-proxy.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
